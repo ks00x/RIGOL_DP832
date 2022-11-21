@@ -2,8 +2,8 @@
 A simple streamlit app to control a Rigol DP832 Power supply
 pip install pyvisa pyvisa-py
 conda install -c conda-forge pyvisa pyvisa-py
+tested with streamlit 1.14
 '''
-
 import streamlit as st
 import pandas as pd
 import pyvisa as visa
@@ -11,6 +11,7 @@ import time
 from DP832 import DP832
 
 session = st.session_state
+st.set_page_config(page_icon='📉')
 
 st.cache
 def get_urls():
@@ -20,7 +21,7 @@ def get_urls():
 st.cache
 def init():  
     session.dp = DP832(session.url)
-    for k in range(3):
+    for k in range(3): # initialize the channel control widgets
         session[f'spv_ch{k+1}'] = session.dp.get_voltage(k+1)
         session[f'spc_ch{k+1}'] = session.dp.get_current(k+1)
         session[f'on_ch{k+1}'] = session.dp.get_output(k+1)
@@ -41,17 +42,18 @@ with st.sidebar:
         if st.button('disconnect'):
             del session.dp
             del session.connected   
-            del session.df     
-            #init.clear()  # clear the singleton status of init() -> run next time on connect!
+            del session.df                 
             st.experimental_rerun() # manual restart of the script        
         if st.button('donwload csv'):
             import datetime 
             f = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S.csv")
             session.df.to_csv(f,sep=' ')
+        st.selectbox('plot channel',(1,2,3),key='plotchan')
+        st.number_input('points to plot',value=500,key='plotlen')
             
 
                  
-if 'connected' in session:
+if 'connected' in session: # only run the following if we are connected to the instrument
     def set_v(k):
         v = float(session[f'spv_ch{k+1}'])
         session.dp.set_voltage(k+1,v)
@@ -63,10 +65,8 @@ if 'connected' in session:
         session.dp.set_output(k+1,v)
         time.sleep(0.2)
     
-    
     disp_area = st.empty()
-    ctrls = st.columns(3)
-    st.selectbox('plot channel',(1,2,3),key='plotchan')
+    ctrls = st.columns(3)    
     plot1 = st.empty()
     plot2 = st.empty()
     plot3 = st.empty()
@@ -78,14 +78,14 @@ if 'connected' in session:
 
     st.write(session.dp.idn)  
 
-    if 'df' not in session:
+    if 'df' not in session: # init the pandas df for storage of measurement history
         col_names = ['time']
         for k in range(3): 
             col_names += [f'CH{k+1}_V',f'CH{k+1}_I',f'CH{k+1}_P']           
         session.df = pd.DataFrame(columns=col_names)
         session.ctr = 0 # loop / data row counter
             
-    while True:                
+    while True: # main loop            
         data = [time.time()]  
         for k in range(3):
             chn = disp_area.columns(3)
@@ -96,11 +96,8 @@ if 'connected' in session:
             chn[k].metric('Current [A]',x[1])
             chn[k].metric('Power [W]',x[2])
         session.df.loc[session.ctr] = data
-        plot1.line_chart(session.df.tail(500),y=f'CH{session.plotchan}_V')
-        plot2.line_chart(session.df.tail(500),y=f'CH{session.plotchan}_I')
-        plot3.line_chart(session.df.tail(500),y=f'CH{session.plotchan}_P')
-        time.sleep(1)
         session.ctr += 1
-
-
-#st.write(session)
+        plot2.line_chart(session.df.tail(session.plotlen),y=f'CH{session.plotchan}_I')
+        plot1.line_chart(session.df.tail(session.plotlen),y=f'CH{session.plotchan}_V')
+        plot3.line_chart(session.df.tail(session.plotlen),y=f'CH{session.plotchan}_P')
+        time.sleep(1)
