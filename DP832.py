@@ -2,6 +2,12 @@ import pyvisa as visa
 
 bindict = dict(YES=True,NO=False,ON=True,OFF=False)
 
+
+def get_visa_resources():
+    'returns a list of available visa resource urls'
+    rm = visa.ResourceManager()
+    return rm.list_resources()
+
 class DP832:
 
     def __init__(self, visa_adr):                
